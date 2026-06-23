@@ -45,7 +45,11 @@ RUN pip install --no-build-isolation git+https://github.com/JeffreyXiang/diffoct
 RUN pip install --no-build-isolation "git+https://github.com/autonomousvision/mip-splatting.git#subdirectory=submodules/diff-gaussian-rasterization"
 
 # --- Gradio demo ---
-RUN pip install gradio==4.44.1 gradio_litmodel3d==0.0.1
+# Pin the whole web stack to gradio-4.44.1-era versions. Newer fastapi/starlette/
+# pydantic (pulled transitively) break gradio 4.44 (schema parser + TemplateResponse
+# API changes), so pin them explicitly to avoid runtime crashes.
+RUN pip install gradio==4.44.1 gradio_litmodel3d==0.0.1 \
+        "fastapi==0.112.2" "starlette==0.38.6" "pydantic==2.9.2" "pydantic-core==2.23.4"
 
 # --- kaolin (required by the flexicubes submodule for mesh extraction) ---
 RUN pip install kaolin -f https://nvidia-kaolin.s3.us-east-2.amazonaws.com/torch-2.4.0_cu121.html
