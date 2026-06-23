@@ -50,6 +50,13 @@ RUN pip install gradio==4.44.1 gradio_litmodel3d==0.0.1
 # --- kaolin (required by the flexicubes submodule for mesh extraction) ---
 RUN pip install kaolin -f https://nvidia-kaolin.s3.us-east-2.amazonaws.com/torch-2.4.0_cu121.html
 
+# Patch a known gradio 4.44.1 bug: gradio_client schema parser crashes on
+# boolean `additionalProperties` ("argument of type 'bool' is not iterable"),
+# which breaks the launch() localhost health-check. Guard non-dict schemas.
+RUN F=/usr/local/lib/python3.10/dist-packages/gradio_client/utils.py && \
+    sed -i 's/^def get_type(schema):/def get_type(schema):\n    if not isinstance(schema, dict):\n        return "Any"/' "$F" && \
+    sed -i 's/^def _json_schema_to_python_type(schema, defs):/def _json_schema_to_python_type(schema, defs):\n    if not isinstance(schema, dict):\n        return "Any"/' "$F"
+
 # Copy the repo last so code edits don't bust the dependency cache.
 # IMPORTANT: run `git submodule update --init --recursive` on the host BEFORE build
 # so trellis/representations/mesh/flexicubes is populated and gets copied in.
