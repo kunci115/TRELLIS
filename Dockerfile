@@ -47,6 +47,9 @@ RUN pip install --no-build-isolation "git+https://github.com/autonomousvision/mi
 # --- Gradio demo ---
 RUN pip install gradio==4.44.1 gradio_litmodel3d==0.0.1
 
+# --- kaolin (required by the flexicubes submodule for mesh extraction) ---
+RUN pip install kaolin -f https://nvidia-kaolin.s3.us-east-2.amazonaws.com/torch-2.4.0_cu121.html
+
 # Copy the repo last so code edits don't bust the dependency cache.
 # IMPORTANT: run `git submodule update --init --recursive` on the host BEFORE build
 # so trellis/representations/mesh/flexicubes is populated and gets copied in.
