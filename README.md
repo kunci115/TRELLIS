@@ -95,23 +95,34 @@ If you don't use Conda (e.g. on Windows via WSL2), use the provided [`setup_venv
     ```
     `ATTN_BACKEND=xformers` avoids the `flash-attn` build and is lighter on VRAM.
 
-### Installation with Docker
+### Installation with Docker (recommended for servers)
 
-A [`Dockerfile`](Dockerfile) and [`docker-compose.yml`](docker-compose.yml) are provided for a clean, conda-free setup on a Linux server with an NVIDIA GPU. They use **CUDA 12.1 + PyTorch 2.4.0 (cu121)** and the arch is pinned to `8.9` (Ada / RTX 40-series); change `TORCH_CUDA_ARCH_LIST` in the Dockerfile for other GPUs.
+A [`Dockerfile`](Dockerfile) and [`docker-compose.yml`](docker-compose.yml) provide a clean, conda-free, reproducible setup on a Linux server with an NVIDIA GPU. **Verified working** on 2× RTX 4090 (CUDA 13.x driver) serving the image-to-3D Gradio demo.
 
-Requirements on the host: Docker, a recent NVIDIA driver, and the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
+The image uses **CUDA 12.1 + PyTorch 2.4.0 (cu121)** with the GPU arch pinned to `8.9` (Ada / RTX 40-series). For other GPUs, change `TORCH_CUDA_ARCH_LIST` in the Dockerfile (e.g. `8.6` for RTX 30-series, `9.0` for H100). It builds all required CUDA extensions (nvdiffrast, diffoctreerast, diff-gaussian-rasterization, kaolin, spconv, xformers) and skips `flash-attn` (uses the `xformers` attention backend instead).
+
+**Host requirements:** Docker with [BuildKit](https://docs.docker.com/build/buildkit/), a recent NVIDIA driver, and the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
 
 ```sh
-git submodule update --init --recursive   # populate flexicubes BEFORE building
+git submodule update --init --recursive   # populate flexicubes BEFORE building (required)
 docker compose up --build                 # builds image, runs app.py on port 7860
 ```
-Then open `http://<server-ip>:7860`. Model weights download on first run into `./.hf_cache` (mounted, so they persist). To run the lighter text-to-3D demo, set `command: python app_text.py` in `docker-compose.yml`.
+First build takes ~10–30 min (compiles CUDA extensions). When you see `Running on local URL: http://0.0.0.0:7860`, open `http://<server-ip>:7860`. Verify it is serving with `curl -s -o /dev/null -w "%{http_code}\n" http://localhost:7860` (expect `200`).
+
+- **Restart without rebuilding:** `docker compose up` (omit `--build`). Only use `--build` after changing the Dockerfile; code-only changes rebuild just the final `COPY` layer.
+- **Text-to-3D (lighter) demo:** set `command: python app_text.py` in `docker-compose.yml`.
+- **Model cache:** HF weights persist in `./.hf_cache` (mounted). The DINOv2 backbone (~1.1 GB) is cached under `/root/.cache`; mount it too (`- ./.cache:/root/.cache`) to avoid re-downloading on each fresh container.
+- **GPU selection:** `docker-compose.yml` pins `CUDA_VISIBLE_DEVICES: "1"`; change or remove it to pick a GPU or use all.
 
 Plain `docker run` equivalent:
 ```sh
 docker build -t trellis .
 docker run --gpus all -p 7860:7860 -v $(pwd)/.hf_cache:/app/.hf_cache trellis
 ```
+
+#### Notes on the Docker build
+
+To run gradio 4.44.1 against current dependency versions, the Dockerfile pins the web stack (`fastapi`, `starlette`, `pydantic`) to gradio-4.44-era versions and applies a small patch to `gradio_client` (tolerant JSON-schema parsing). The CUDA extensions are installed with `--no-build-isolation` so they compile against the already-installed PyTorch. These are all handled automatically — no manual steps needed.
 
 ### Choosing a model for limited VRAM
 
