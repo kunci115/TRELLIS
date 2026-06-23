@@ -37,9 +37,11 @@ RUN pip install xformers==0.0.27.post2 --index-url https://download.pytorch.org/
     && pip install spconv-cu120
 
 # --- rendering extensions (compiled with nvcc) ---
-RUN pip install git+https://github.com/NVlabs/nvdiffrast.git
-RUN pip install git+https://github.com/JeffreyXiang/diffoctreerast.git
-RUN pip install "git+https://github.com/autonomousvision/mip-splatting.git#subdirectory=submodules/diff-gaussian-rasterization"
+# --no-build-isolation: these setup.py files import torch at build time,
+# which build isolation would otherwise hide. Provide setuptools too.
+RUN pip install --no-build-isolation git+https://github.com/NVlabs/nvdiffrast.git
+RUN pip install --no-build-isolation git+https://github.com/JeffreyXiang/diffoctreerast.git
+RUN pip install --no-build-isolation "git+https://github.com/autonomousvision/mip-splatting.git#subdirectory=submodules/diff-gaussian-rasterization"
 
 # --- Gradio demo ---
 RUN pip install gradio==4.44.1 gradio_litmodel3d==0.0.1
