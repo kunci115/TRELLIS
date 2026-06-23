@@ -51,12 +51,22 @@ RUN pip install gradio==4.44.1 gradio_litmodel3d==0.0.1
 RUN pip install kaolin -f https://nvidia-kaolin.s3.us-east-2.amazonaws.com/torch-2.4.0_cu121.html
 
 # Patch a known gradio 4.44.1 bug: gradio_client schema parser crashes on
-# boolean `additionalProperties` ("argument of type 'bool' is not iterable"),
-# which breaks the launch() localhost health-check. Guard the buggy line.
-RUN F=/usr/local/lib/python3.10/dist-packages/gradio_client/utils.py && \
-    sed -i 's/    if "const" in schema:/    if not isinstance(schema, dict):\n        return "Any"\n    if "const" in schema:/' "$F" && \
-    sed -i 's/raise APIInfoParseError(f"Cannot parse schema {schema}")/return "Any"/' "$F" && \
-    grep -n 'return "Any"' "$F"
+# boolean `additionalProperties` (raises APIInfoParseError "Cannot parse schema True"),
+# which breaks the launch() localhost health-check. Make the parser tolerant.
+RUN python - <<'PYEOF'
+import pathlib
+F = pathlib.Path("/usr/local/lib/python3.10/dist-packages/gradio_client/utils.py")
+s = F.read_text()
+s = s.replace(
+    '    if "const" in schema:',
+    '    if not isinstance(schema, dict):\n        return "Any"\n    if "const" in schema:')
+s = s.replace(
+    'raise APIInfoParseError(f"Cannot parse schema {schema}")',
+    'return "Any"')
+F.write_text(s)
+assert 'Cannot parse schema {schema}' not in s, "gradio_client patch FAILED"
+print("PATCHED gradio_client OK")
+PYEOF
 
 # Copy the repo last so code edits don't bust the dependency cache.
 # IMPORTANT: run `git submodule update --init --recursive` on the host BEFORE build
