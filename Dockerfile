@@ -29,7 +29,8 @@ RUN pip install torch==2.4.0 torchvision==0.19.0 --index-url https://download.py
 # --- basic deps ---
 RUN pip install "numpy<2" \
         pillow imageio imageio-ffmpeg tqdm easydict opencv-python-headless scipy ninja \
-        rembg onnxruntime trimesh open3d xatlas pyvista pymeshfix igraph transformers \
+        rembg onnxruntime trimesh open3d xatlas pyvista pymeshfix igraph \
+        "transformers==4.46.3" "huggingface_hub==0.25.2" \
     && pip install git+https://github.com/EasternJournalist/utils3d.git@9a4eb15e4021b67b12c460c7057d642626897ec8
 
 # --- attention + sparse backends (prebuilt wheels) ---
