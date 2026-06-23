@@ -55,7 +55,8 @@ RUN pip install kaolin -f https://nvidia-kaolin.s3.us-east-2.amazonaws.com/torch
 # which breaks the launch() localhost health-check. Guard the buggy line.
 RUN F=/usr/local/lib/python3.10/dist-packages/gradio_client/utils.py && \
     sed -i 's/    if "const" in schema:/    if not isinstance(schema, dict):\n        return "Any"\n    if "const" in schema:/' "$F" && \
-    grep -n "if not isinstance(schema, dict)" "$F"
+    sed -i 's/raise APIInfoParseError(f"Cannot parse schema {schema}")/return "Any"/' "$F" && \
+    grep -n 'return "Any"' "$F"
 
 # Copy the repo last so code edits don't bust the dependency cache.
 # IMPORTANT: run `git submodule update --init --recursive` on the host BEFORE build
