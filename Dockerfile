@@ -1,0 +1,58 @@
+# TRELLIS — Gradio demo, conda-free, CUDA 12.1 (RTX 4090 / Ada sm_89).
+# Build:  docker build -t trellis .
+# Run:    see docker-compose.yml or the `docker run` line in README.
+FROM nvidia/cuda:12.1.1-devel-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+# 4090 = Ada = compute 8.9. Pin arch so extension builds are fast and small.
+ENV TORCH_CUDA_ARCH_LIST="8.9"
+ENV ATTN_BACKEND=xformers
+ENV SPCONV_ALGO=native
+ENV PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+ENV PATH=/usr/local/cuda/bin:$PATH
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git build-essential ninja-build \
+        python3.10 python3.10-dev python3.10-venv python3-pip \
+        ffmpeg libgl1 libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Use python3.10 as the default python/pip
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1 \
+    && python -m pip install --upgrade pip wheel setuptools
+
+WORKDIR /app
+
+# --- PyTorch (cu121, matches CUDA 12.1 toolkit) ---
+RUN pip install torch==2.4.0 torchvision==0.19.0 --index-url https://download.pytorch.org/whl/cu121
+
+# --- basic deps ---
+RUN pip install "numpy<2" \
+        pillow imageio imageio-ffmpeg tqdm easydict opencv-python-headless scipy ninja \
+        rembg onnxruntime trimesh open3d xatlas pyvista pymeshfix igraph transformers \
+    && pip install git+https://github.com/EasternJournalist/utils3d.git@9a4eb15e4021b67b12c460c7057d642626897ec8
+
+# --- attention + sparse backends (prebuilt wheels) ---
+RUN pip install xformers==0.0.27.post2 --index-url https://download.pytorch.org/whl/cu121 \
+    && pip install spconv-cu120
+
+# --- rendering extensions (compiled with nvcc) ---
+RUN pip install git+https://github.com/NVlabs/nvdiffrast.git
+RUN pip install git+https://github.com/JeffreyXiang/diffoctreerast.git
+RUN pip install "git+https://github.com/autonomousvision/mip-splatting.git#subdirectory=submodules/diff-gaussian-rasterization"
+
+# --- Gradio demo ---
+RUN pip install gradio==4.44.1 gradio_litmodel3d==0.0.1
+
+# Copy the repo last so code edits don't bust the dependency cache.
+# IMPORTANT: run `git submodule update --init --recursive` on the host BEFORE build
+# so trellis/representations/mesh/flexicubes is populated and gets copied in.
+COPY . /app
+
+# HF model cache persists via the mounted volume (see docker run / compose).
+ENV HF_HOME=/app/.hf_cache
+
+EXPOSE 7860
+# Gradio must listen on 0.0.0.0 to be reachable outside the container.
+ENV GRADIO_SERVER_NAME=0.0.0.0
+CMD ["python", "app.py"]

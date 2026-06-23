@@ -37,12 +37,12 @@
 ## 📦 Installation
 
 ### Prerequisites
-- **System**: The code is currently tested only on **Linux**.  For windows setup, you may refer to [#3](https://github.com/microsoft/TRELLIS/issues/3) (not fully tested).
-- **Hardware**: An NVIDIA GPU with at least 16GB of memory is necessary. The code has been verified on NVIDIA A100 and A6000 GPUs.  
+- **System**: The code is tested on **Linux**. On **Windows**, run it inside **WSL2 (Ubuntu)** — see [Installation without Conda (WSL2)](#installation-without-conda-wsl2) below. Native Windows is not recommended (the CUDA extensions are hard to compile with MSVC).
+- **Hardware**: An NVIDIA GPU with at least 16GB of memory is recommended. Verified on A100 and A6000. GPUs with <16GB (e.g. 8GB laptop cards) may run the **smallest** models only and can OOM — see [Choosing a model for limited VRAM](#choosing-a-model-for-limited-vram).
 - **Software**:   
-  - The [CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit-archive) is needed to compile certain submodules. The code has been tested with CUDA versions 11.8 and 12.2.  
-  - [Conda](https://docs.anaconda.com/miniconda/install/#quick-command-line-install) is recommended for managing dependencies.  
-  - Python version 3.8 or higher is required. 
+  - The [CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit-archive) is needed to compile certain submodules. Tested with CUDA 11.8 and 12.2.  
+  - [Conda](https://docs.anaconda.com/miniconda/install/#quick-command-line-install) is recommended, but **not required** — a plain Python `venv` works (see below).  
+  - **Python 3.10** is recommended (3.8+ required; do not use 3.13+, dependencies are not yet compatible). 
 
 ### Installation Steps
 1. Clone the repo:
@@ -66,6 +66,64 @@
     . ./setup.sh --new-env --basic --xformers --flash-attn --diffoctreerast --spconv --mipgaussian --kaolin --nvdiffrast
     ```
     The detailed usage of `setup.sh` can be found by running `. ./setup.sh --help`.
+
+### Installation without Conda (WSL2)
+
+If you don't use Conda (e.g. on Windows via WSL2), use the provided [`setup_venv.sh`](setup_venv.sh) instead. It installs everything the **Gradio demo** needs into a plain Python `venv` — no Conda, no `flash-attn`, no `kaolin` (neither is required for inference).
+
+1. **One-time system prep** inside WSL2 Ubuntu 22.04 (also install a recent NVIDIA driver on the *Windows* side — that gives the GPU to WSL; do not install a Linux display driver inside WSL):
+    ```sh
+    sudo apt update
+    sudo apt install -y build-essential git python3.10 python3.10-venv python3-pip ffmpeg libgl1 libglib2.0-0
+    # then install CUDA Toolkit 11.8 from NVIDIA's WSL-Ubuntu repo (package: cuda-toolkit-11-8)
+    nvidia-smi      # GPU must be visible
+    nvcc --version  # must report 11.8
+    ```
+
+2. **Clone into the WSL filesystem** (e.g. `~/TRELLIS`, *not* `/mnt/c/...` — building across `/mnt/c` is slow and flaky) and run:
+    ```sh
+    git submodule update --init --recursive   # pulls flexicubes
+    bash setup_venv.sh
+    ```
+
+3. **Run the demo:**
+    ```sh
+    source .venv/bin/activate
+    export ATTN_BACKEND=xformers SPCONV_ALGO=native PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+    python app.py        # image-to-3D demo
+    # or: python app_text.py   # text-to-3D demo (uses the smaller text models)
+    ```
+    `ATTN_BACKEND=xformers` avoids the `flash-attn` build and is lighter on VRAM.
+
+### Installation with Docker
+
+A [`Dockerfile`](Dockerfile) and [`docker-compose.yml`](docker-compose.yml) are provided for a clean, conda-free setup on a Linux server with an NVIDIA GPU. They use **CUDA 12.1 + PyTorch 2.4.0 (cu121)** and the arch is pinned to `8.9` (Ada / RTX 40-series); change `TORCH_CUDA_ARCH_LIST` in the Dockerfile for other GPUs.
+
+Requirements on the host: Docker, a recent NVIDIA driver, and the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
+
+```sh
+git submodule update --init --recursive   # populate flexicubes BEFORE building
+docker compose up --build                 # builds image, runs app.py on port 7860
+```
+Then open `http://<server-ip>:7860`. Model weights download on first run into `./.hf_cache` (mounted, so they persist). To run the lighter text-to-3D demo, set `command: python app_text.py` in `docker-compose.yml`.
+
+Plain `docker run` equivalent:
+```sh
+docker build -t trellis .
+docker run --gpus all -p 7860:7860 -v $(pwd)/.hf_cache:/app/.hf_cache trellis
+```
+
+### Choosing a model for limited VRAM
+
+The official minimum is 16GB. On smaller GPUs (e.g. 8GB), start with the **smallest** model and the text demo, which is lighter than `TRELLIS-image-large` (1.2B):
+
+| Need | Smallest option | Notes |
+| --- | --- | --- |
+| Text-to-3D | `TRELLIS-text-base` (342M) | Run via `app_text.py` / `example_text.py`. Lightest. |
+| Image-to-3D | `TRELLIS-image-large` (1.2B) | Only image model; heaviest. May OOM under 16GB. |
+
+If you still hit out-of-memory: lower the sampler `steps`, generate one output format at a time, or move to a 16GB+ GPU.
+
     ```sh
     Usage: setup.sh [OPTIONS]
     Options:
